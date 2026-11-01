@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Class Finder</title>
+<link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="icon.svg">
+<meta name="theme-color" content="#1f6f5c">
+<style>
+:root{--bg:#eef3f2;--card:#fff;--ink:#1d2b2a;--mute:#5b6e6c;--line:#d3e0dd;--pine:#1f6f5c;--on:#fff;--chip:#dcebe8;--warn:#a85d0a;--full:#8a2f3a;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#111a19;--card:#1a2625;--ink:#e6efed;--mute:#97aeab;--line:#2c3d3b;--pine:#58c2a8;--on:#0d1a17;--chip:#233633;--warn:#e5a04f;--full:#e58a95;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 "Avenir Next",system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{max-width:640px;margin:0 auto;padding:12px 14px 40px}
+h1{font-size:1.5rem;margin:8px 0 12px;letter-spacing:-.01em}
+.ctl{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px}
+input,select{font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;width:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;color:var(--ink);background:var(--chip);border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
+button[aria-pressed=true]{background:var(--pine);color:var(--on)}
+.seg{display:flex;flex:1}.seg button{flex:1;border-radius:0}.seg button:first-child{border-radius:10px 0 0 10px}.seg button:last-child{border-radius:0 10px 10px 0}
+.days button{flex:1;padding:8px 0;min-width:40px}
+#status{color:var(--mute);font-size:.85rem;margin:10px 2px}
+h2{font-size:1rem;margin:18px 2px 8px;color:var(--pine)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;display:grid;gap:3px}
+.top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.time{font-weight:700}.sub{color:var(--mute);font-size:.9rem}
+.badge{font-size:.85rem;font-weight:600}.open{color:var(--pine)}.few{color:var(--warn)}.full{color:var(--full)}
+a.go{justify-self:start;margin-top:6px;background:var(--pine);color:var(--on);text-decoration:none;font-weight:600;border-radius:10px;padding:8px 16px}
+a.go.alt{background:var(--chip);color:var(--ink);font-weight:500}
+:focus-visible{outline:3px solid var(--pine);outline-offset:2px}
+.empty{text-align:center;color:var(--mute);padding:30px 10px}
+</style></head><body><main>
+<h1>Class Finder</h1>
+<section class="ctl" aria-label="Filters">
+<input id="q" type="search" placeholder="Search name, instructor, room (e.g. yoga)" aria-label="Search">
+<div class="row"><div class="seg" id="avail" role="group" aria-label="Availability"><button data-v="1">Available</button><button data-v="0">All classes</button></div>
+<select id="tod" aria-label="Time of day" style="flex:1"><option value="any">Any time</option><option value="am">Morning</option><option value="pm">Afternoon</option><option value="eve">Evening</option></select></div>
+<div class="row days" id="days" role="group" aria-label="Days"></div>
+<div class="row"><button id="clear">Clear filters</button><button id="refresh">Refresh</button></div>
+</section>
+<div id="status" role="status"></div><div id="list"></div>
+</main>
+<script>
+const FUNCTION_URL="https://rrremrggallytwfyfjpa.supabase.co/functions/v1/fitness-classes";
+const FK="classFinder.filters.v1",DK="classFinder.data.v1",DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DEF={q:"",avail:true,days:[],tod:"any"};
+const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
+const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+let f={...DEF,...ld(FK,{})},data=ld(DK,null);
+const $=id=>document.getElementById(id);
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
+const dow=d=>new Date(d+"T12:00:00").getDay();
+function startHour(t){const m=/(\d+):\d+\s*(am|pm)/i.exec(t||"");if(!m)return null;return(+m[1]%12)+(m[2].toLowerCase()=="pm"?12:0)}
+function match(c){
+ if(f.avail&&c.status!=="open")return false;
+ if(f.days.length&&!f.days.includes(dow(c.date)))return false;
+ if(f.tod!=="any"){const h=startHour(c.time);if(h==null)return false;if((h<12?"am":h<17?"pm":"eve")!==f.tod)return false}
+ const q=f.q.trim().toLowerCase();
+ return!q||[c.name,c.instructor,c.location,c.room].join(" ").toLowerCase().includes(q)}
+function save(){sv(FK,f)}
+function syncControls(){
+ $("q").value=f.q;$("tod").value=f.tod;
+ document.querySelectorAll("#avail button").forEach(b=>b.setAttribute("aria-pressed",String((b.dataset.v==="1")===f.avail)));
+ document.querySelectorAll("#days button").forEach(b=>b.setAttribute("aria-pressed",String(f.days.includes(+b.dataset.d))))}
+function render(){
+ const list=$("list");list.replaceChildren();
+ if(!data){$("status").textContent="Loading classes…";return}
+ const rows=(data.classes||[]).filter(match);
+ const t=new Date(data.fetchedAt).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+ $("status").textContent=`${rows.length} of ${data.totalMatching??data.count} classes · updated ${t}`;
+ if(!rows.length){list.append(el("div","empty","No classes match these filters. Try All classes or clear filters."));return}
+ let last="";
+ for(const c of rows){
+  if(c.dayLabel!==last){list.append(el("h2","",c.dayLabel));last=c.dayLabel}
+  const card=el("div","card"),top=el("div","top");
+  top.append(el("span","time",c.time));
+  const cls=c.status==="open"?(c.spotsLeft<=3?"few":"open"):c.status==="full"?"full":"";
+  top.append(el("span","badge "+cls,c.status==="open"?c.spotsText:c.status==="full"?"Full":"Not open yet"));
+  card.append(top,el("div","",c.name),el("div","sub",[c.instructor,c.room,c.location].filter(Boolean).join(", ")));
+  const a=el("a","go"+(c.status==="open"?"":" alt"),c.status==="open"?"Register":"More info");
+  a.href=c.registerUrl;a.target="_blank";a.rel="noopener";card.append(a);list.append(card)}}
+async function refresh(force){
+ if(!force&&data&&Date.now()-(data._got||0)<90000){render();return}
+ $("status").textContent="Refreshing…";
+ try{const r=await fetch(FUNCTION_URL);if(!r.ok)throw new Error("HTTP "+r.status);data=await r.json();data._got=Date.now();sv(DK,data)}
+ catch(e){if(!data){$("status").textContent="Couldn't load classes ("+e.message+"). Check your connection and tap Refresh.";return}}
+ render()}
+DN.forEach((n,i)=>{const b=el("button","",n);b.dataset.d=i;b.onclick=()=>{f.days=f.days.includes(i)?f.days.filter(x=>x!==i):[...f.days,i];save();syncControls();render()};$("days").append(b)});
+document.querySelectorAll("#avail button").forEach(b=>b.onclick=()=>{f.avail=b.dataset.v==="1";save();syncControls();render()});
+$("q").oninput=e=>{f.q=e.target.value;save();render()};
+$("tod").onchange=e=>{f.tod=e.target.value;save();render()};
+$("clear").onclick=()=>{f={...DEF};save();syncControls();render()};
+$("refresh").onclick=()=>refresh(true);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+syncControls();render();refresh();
+if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script></body></html>
