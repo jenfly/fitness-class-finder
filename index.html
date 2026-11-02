@@ -18,7 +18,27 @@ input,select{font:inherit;color:inherit;background:var(--bg);border:1px solid va
 button{font:inherit;color:var(--ink);background:var(--chip);border:0;border-radius:10px;padding:8px 12px;cursor:pointer}
 button[aria-pressed=true]{background:var(--pine);color:var(--on)}
 .seg{display:flex;flex:1}.seg button{flex:1;border-radius:0}.seg button:first-child{border-radius:10px 0 0 10px}.seg button:last-child{border-radius:0 10px 10px 0}
-.days button{flex:1;padding:8px 0;min-width:40px}
+[hidden]{display:none!important}
+.hd{display:flex;justify-content:space-between;align-items:center}
+.ic{font-size:1.4rem;width:44px;height:44px;border-radius:50%;padding:0}
+.fh{display:flex;align-items:center;gap:6px}
+#fh{background:none;padding:6px 4px;font-weight:600}
+.chev{display:inline-block;margin-right:6px;font-size:1.5rem;line-height:1;transition:transform .15s}
+#fh[aria-expanded=true] .chev{transform:rotate(90deg)}
+#fsum{color:var(--mute);font-size:.9rem;flex:1}
+.lnk{margin-left:auto;background:none;color:var(--pine);padding:6px 4px;text-decoration:underline}
+.chip{border-radius:999px;padding:6px 12px;font-size:.9rem}
+#fp{display:grid;gap:12px;border-top:1px solid var(--line);padding-top:12px}
+.days7{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.days7 button{padding:0;min-height:44px}
+.trow{display:flex;justify-content:space-between}
+.dual{position:relative;height:30px}
+.track{position:absolute;left:13px;right:13px;top:13px;height:4px;background:var(--line);border-radius:2px}
+#fill{position:absolute;top:0;bottom:0;background:var(--pine);border-radius:2px}
+.dual input{position:absolute;inset:0;width:100%;margin:0;padding:0;border:0;background:none;pointer-events:none;-webkit-appearance:none;appearance:none}
+.dual input::-webkit-slider-runnable-track{background:none}
+.dual input::-webkit-slider-thumb{-webkit-appearance:none;pointer-events:auto;width:26px;height:26px;border-radius:50%;background:var(--pine);border:3px solid #fff;box-shadow:0 1px 3px #0005}
+.dual input::-moz-range-thumb{pointer-events:auto;width:20px;height:20px;border-radius:50%;background:var(--pine);border:3px solid #fff}
 #status{color:var(--mute);font-size:.85rem;margin:10px 2px}
 h2{font-size:1rem;margin:18px 2px 8px;color:var(--pine)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:8px;display:grid;gap:3px}
@@ -30,38 +50,57 @@ a.go.alt{background:var(--chip);color:var(--ink);font-weight:500}
 :focus-visible{outline:3px solid var(--pine);outline-offset:2px}
 .empty{text-align:center;color:var(--mute);padding:30px 10px}
 </style></head><body><main>
-<h1>Class Finder</h1>
+<header class="hd"><h1>Class Finder</h1><button id="refresh" class="ic" aria-label="Refresh classes">↻</button></header>
 <section class="ctl" aria-label="Filters">
-<input id="q" type="search" placeholder="Search name, instructor, room (e.g. yoga)" aria-label="Search">
-<div class="row"><div class="seg" id="avail" role="group" aria-label="Availability"><button data-v="1">Available</button><button data-v="0">All classes</button></div>
-<select id="tod" aria-label="Time of day" style="flex:1"><option value="any">Any time</option><option value="am">Morning</option><option value="pm">Afternoon</option><option value="eve">Evening</option></select></div>
-<div class="row days" id="days" role="group" aria-label="Days"></div>
-<div class="row"><button id="clear">Clear filters</button><button id="refresh">Refresh</button></div>
+<input id="q" type="search" placeholder="Search classes or instructors" aria-label="Search">
+<div class="seg" id="avail" role="group" aria-label="Availability"><button data-v="1">Available</button><button data-v="0">All classes</button></div>
+<div class="fh"><button id="fh" aria-expanded="false" aria-controls="fp"><span class="chev" aria-hidden="true">›</span>Days &amp; time</button><span id="fsum"></span><button id="clear" class="lnk">Clear all</button></div>
+<div class="row" id="chips"></div>
+<div id="fp" hidden>
+<div class="days7" id="days" role="group" aria-label="Days of week"></div>
+<div><div class="trow"><span>Start time</span><b id="tlab"></b></div>
+<div class="dual"><div class="track"><div id="fill"></div></div><input id="t1" type="range" min="360" max="1320" step="30" aria-label="Earliest start"><input id="t2" type="range" min="360" max="1320" step="30" aria-label="Latest start"></div></div>
+</div>
 </section>
 <div id="status" role="status"></div><div id="list"></div>
 </main>
 <script>
 const FUNCTION_URL="https://rrremrggallytwfyfjpa.supabase.co/functions/v1/fitness-classes";
-const FK="classFinder.filters.v1",DK="classFinder.data.v1",DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const DEF={q:"",avail:true,days:[],tod:"any"};
+const FK="classFinder.filters.v1",DK="classFinder.data.v1",DN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],D2=["Su","Mo","Tu","We","Th","Fr","Sa"];
+const TMIN=360,TMAX=1320,DEF={q:"",avail:true,days:[],tmin:TMIN,tmax:TMAX};
 const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}};
 const sv=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 let f={...DEF,...ld(FK,{})},data=ld(DK,null);
 const $=id=>document.getElementById(id);
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const dow=d=>new Date(d+"T12:00:00").getDay();
-function startHour(t){const m=/(\d+):\d+\s*(am|pm)/i.exec(t||"");if(!m)return null;return(+m[1]%12)+(m[2].toLowerCase()=="pm"?12:0)}
+function startMin(t){const m=/(\d+):(\d+)\s*(am|pm)/i.exec(t||"");return m?((+m[1]%12)+(m[3].toLowerCase()=="pm"?12:0))*60+ +m[2]:null}
 function match(c){
  if(f.avail&&c.status!=="open")return false;
  if(f.days.length&&!f.days.includes(dow(c.date)))return false;
- if(f.tod!=="any"){const h=startHour(c.time);if(h==null)return false;if((h<12?"am":h<17?"pm":"eve")!==f.tod)return false}
+ if(timeOn()){const m=startMin(c.time);if(m==null||m<f.tmin||m>f.tmax)return false}
  const q=f.q.trim().toLowerCase();
  return!q||[c.name,c.instructor,c.location,c.room].join(" ").toLowerCase().includes(q)}
 function save(){sv(FK,f)}
+const fmt=m=>{const h=Math.floor(m/60),mm=m%60;return(h%12||12)+(mm?":"+String(mm).padStart(2,"0"):"")+" "+(h<12?"am":"pm")};
+const timeOn=()=>f.tmin>TMIN||f.tmax<TMAX;
+const timeTxt=()=>f.tmin>TMIN&&f.tmax<TMAX?`${fmt(f.tmin)}–${fmt(f.tmax)}`:f.tmin>TMIN?`From ${fmt(f.tmin)}`:`Until ${fmt(f.tmax)}`;
+function addChip(t,fn){const b=el("button","chip",t+" ×");b.setAttribute("aria-label","Remove filter: "+t);b.onclick=()=>{fn();save();syncControls();render()};$("chips").append(b)}
 function syncControls(){
- $("q").value=f.q;$("tod").value=f.tod;
+ $("q").value=f.q;
  document.querySelectorAll("#avail button").forEach(b=>b.setAttribute("aria-pressed",String((b.dataset.v==="1")===f.avail)));
- document.querySelectorAll("#days button").forEach(b=>b.setAttribute("aria-pressed",String(f.days.includes(+b.dataset.d))))}
+ document.querySelectorAll("#days button").forEach(b=>b.setAttribute("aria-pressed",String(f.days.includes(+b.dataset.d))));
+ $("t1").value=f.tmin;$("t2").value=f.tmax;
+ $("tlab").textContent=timeOn()?fmt(f.tmin)+" – "+fmt(f.tmax):"Any time";
+ const sp=n=>(n-TMIN)/(TMAX-TMIN)*100;
+ $("fill").style.left=sp(f.tmin)+"%";$("fill").style.right=(100-sp(f.tmax))+"%";
+ const on=f.days.length>0||timeOn(),open=!$("fp").hidden;
+ $("fsum").textContent=on||open?"":"Any day, any time";
+ const ch=$("chips");ch.replaceChildren();
+ if(f.days.length)addChip([...f.days].sort().map(i=>DN[i]).join(", "),()=>{f.days=[]});
+ if(timeOn())addChip(timeTxt(),()=>{f.tmin=TMIN;f.tmax=TMAX});
+ ch.hidden=open||!on;
+ $("clear").hidden=!(on||f.q||!f.avail)}
 function render(){
  const list=$("list");list.replaceChildren();
  if(!data){$("status").textContent="Loading classes…";return}
@@ -85,10 +124,13 @@ async function refresh(force){
  try{const r=await fetch(FUNCTION_URL);if(!r.ok)throw new Error("HTTP "+r.status);data=await r.json();data._got=Date.now();sv(DK,data)}
  catch(e){if(!data){$("status").textContent="Couldn't load classes ("+e.message+"). Check your connection and tap Refresh.";return}}
  render()}
-DN.forEach((n,i)=>{const b=el("button","",n);b.dataset.d=i;b.onclick=()=>{f.days=f.days.includes(i)?f.days.filter(x=>x!==i):[...f.days,i];save();syncControls();render()};$("days").append(b)});
+D2.forEach((n,i)=>{const b=el("button","",n);b.dataset.d=i;b.onclick=()=>{f.days=f.days.includes(i)?f.days.filter(x=>x!==i):[...f.days,i];save();syncControls();render()};$("days").append(b)});
 document.querySelectorAll("#avail button").forEach(b=>b.onclick=()=>{f.avail=b.dataset.v==="1";save();syncControls();render()});
 $("q").oninput=e=>{f.q=e.target.value;save();render()};
-$("tod").onchange=e=>{f.tod=e.target.value;save();render()};
+$("fh").onclick=()=>{const o=$("fp").hidden;$("fp").hidden=!o;$("fh").setAttribute("aria-expanded",String(o));syncControls()};
+$("t1").oninput=e=>{f.tmin=Math.min(+e.target.value,f.tmax-30);save();syncControls();render()};
+$("t2").oninput=e=>{f.tmax=Math.max(+e.target.value,f.tmin+30);save();syncControls();render()};
+
 $("clear").onclick=()=>{f={...DEF};save();syncControls();render()};
 $("refresh").onclick=()=>refresh(true);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
