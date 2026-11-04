@@ -104,7 +104,7 @@ function syncControls(){
 function render(){
  const list=$("list");list.replaceChildren();
  if(!data){$("status").textContent="Loading classes…";return}
- const rows=(data.classes||[]).filter(match);
+ const rows=(data.classes||[]).filter(match).sort((a,b)=>(a.date||"").localeCompare(b.date||"")||(startMin(a.time)??1e9)-(startMin(b.time)??1e9));
  const t=new Date(data.fetchedAt).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
  $("status").textContent=`${rows.length} of ${data.totalMatching??data.count} classes · updated ${t}`;
  if(!rows.length){list.append(el("div","empty","No classes match these filters. Try All classes or clear filters."));return}
